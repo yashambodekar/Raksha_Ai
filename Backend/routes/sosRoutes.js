@@ -11,5 +11,9 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 router.post("/trigger", upload.single("audio"), sosController.triggerSOS);
+router.post("/resend", sosController.resendSOS);
+router.post("/fake-detection", sosController.markFalseDetection);
+router.post("/classify", upload.single("audio"), sosController.classifyAndTriggerSOS);
+
 
 module.exports = router;

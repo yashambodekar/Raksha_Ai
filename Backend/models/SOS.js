@@ -18,6 +18,8 @@ const sosSchema = new mongoose.Schema({
     type: Date,
     default: Date.now,
   },
+  falseDetectionVotes: [String], 
+  isFalseAlarm: { type: Boolean, default: false },
 });
 
 module.exports = mongoose.model("SOS", sosSchema);

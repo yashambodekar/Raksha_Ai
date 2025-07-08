@@ -5,4 +5,5 @@ const { toggleGuardianMode, getGuardianStatus } = require("../Controllers/guardi
 router.post("/toggle", toggleGuardianMode);
 router.get("/status/:userId", getGuardianStatus);
 
+
 module.exports = router;

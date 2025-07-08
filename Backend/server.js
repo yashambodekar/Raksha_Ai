@@ -5,6 +5,7 @@ const connectDB = require("./config/db");
 const authroutes = require("./routes/authRoutes")
 const guardianRoutes = require("./routes/guardianRoutes");
 const sosRoutes = require("./routes/sosRoutes");
+const userRoutes = require("./routes/userRoutes")
 
 dotenv.config();
 
@@ -17,6 +18,7 @@ app.use(express.json());
 app.use("/auth",authroutes)
 app.use("/guardian", guardianRoutes);
 app.use("/sos", sosRoutes);
+app.use("/use",userRoutes);
 
 
 // Test Route
