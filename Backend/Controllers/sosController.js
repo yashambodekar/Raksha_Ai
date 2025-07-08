@@ -1,7 +1,9 @@
 const cloudinary = require("../config/Cloudinary");
 const fs = require("fs");
+const path = require("path"); // ✅ FIXED
 const User = require("../models/User");
 const SOS = require("../models/SOS");
+const GuardianLog = require("../models/GuardianLog");
 const twilio = require("twilio");
 
 const client = twilio(
@@ -86,45 +88,45 @@ exports.classifyAndTriggerSOS = async (req, res) => {
 
     if (!audioFile) return res.status(400).json({ error: "Audio file required" });
 
-    // ✅ 1. Check if Guardian Mode is active
-    const GuardianLog = require("../models/GuardianLog");
+    // ✅ 1. Check Guardian Mode
     const guardian = await GuardianLog.findOne({ userId });
-
     if (!guardian || !guardian.isActive) {
-      // Delete temp file if not needed
       fs.unlinkSync(audioFile.path);
       return res.status(403).json({ error: "Guardian Mode is not active" });
     }
 
-    // ✅ 2. Upload audio to Cloudinary
-    const cloudUpload = await cloudinary.uploader.upload(audioFile.path, {
-      resource_type: "video",
-      folder: "raksha-classified",
-    });
-
-    fs.unlinkSync(audioFile.path);
-    const audioUrl = cloudUpload.secure_url;
-
-    // ✅ 3. Run Python model
+    // ✅ 2. Run Python model first
     const { spawn } = require("child_process");
-    const python = spawn("python", ["./Python/classify_audio.py", audioFile.path]);
+    const python = spawn("python", [
+      path.join(__dirname, "../Python/classify_audio.py"),
+      audioFile.path,
+    ]);
 
     let output = "";
-    python.stdout.on("data", (data) => output += data.toString());
+    python.stdout.on("data", (data) => (output += data.toString()));
     python.stderr.on("data", (err) => console.error("Python Error:", err.toString()));
 
     python.on("close", async () => {
       const [label, confidenceStr] = output.trim().split(",");
       const confidence = parseFloat(confidenceStr);
 
-      if (["scream", "crying", "violence", "abuse"].includes(label.toLowerCase())) {
-        // ✅ 4. Save SOS to DB
+      // ✅ 3. Upload to Cloudinary (only if detection passed)
+      const cloudUpload = await cloudinary.uploader.upload(audioFile.path, {
+        resource_type: "video",
+        folder: "raksha-classified",
+      });
+
+      // ✅ Delete local audio
+      fs.unlinkSync(audioFile.path);
+      const audioUrl = cloudUpload.secure_url;
+
+      // ✅ 4. Trigger SOS only if relevant sound detected
+      if (["scream", "crying", "violence", "abuse"].includes(label.toLowerCase()) && confidence > 0.3) {
         const newSOS = new SOS({ userId, audioUrl, location, detectedLabel: label, confidence });
         await newSOS.save();
 
-        // ✅ 5. Send WhatsApp alerts
         const user = await User.findById(userId);
-        const message = `🚨 *SOS Alert from ${user.name}* 🚨\n\n📍 *Location:*\nhttps://www.google.com/maps?q=${location.lat},${location.lng}\n🔊 *Audio:* ${audioUrl}\n\n🛡️ Detected: ${label} (${confidence}%)`;
+        const message = `🚨 *SOS Alert from ${user.name}* 🚨\n\n📍 *Location:*\nhttps://www.google.com/maps?q=${location.lat},${location.lng}\n🔊 *Audio:* ${audioUrl}\n\n🛡️ Detected: ${label} (${(confidence * 100).toFixed(2)}%)`;
 
         for (const contact of user.emergencyContacts) {
           await client.messages.create({
@@ -140,7 +142,7 @@ exports.classifyAndTriggerSOS = async (req, res) => {
       }
     });
   } catch (err) {
-    console.error("Classify SOS Error:", err);
+    console.error("❌ Classify SOS Error:", err);
     res.status(500).json({ error: "Error classifying audio" });
   }
 };

@@ -1,13 +1,18 @@
+import os
+import sys
 import numpy as np
 import tensorflow as tf
 import librosa
 
-# Load labels
-with open("labels.txt", "r") as f:
+# Always load labels.txt from the script's directory
+script_dir = os.path.dirname(os.path.abspath(__file__))
+labels_path = os.path.join(script_dir, "labels.txt")
+with open(labels_path, "r") as f:
     labels = [line.strip() for line in f.readlines()]
 
 # Load the TFLite model
-interpreter = tf.lite.Interpreter(model_path="soundclassifier_with_metadata.tflite")
+model_path = os.path.join(script_dir, "soundclassifier_with_metadata.tflite")
+interpreter = tf.lite.Interpreter(model_path=model_path)
 interpreter.allocate_tensors()
 
 # Get input and output details
@@ -36,13 +41,16 @@ def predict(file_path):
 
     output_data = interpreter.get_tensor(output_details[0]['index'])[0]
     top_index = np.argmax(output_data)
-    predicted_label = labels[top_index]
+    predicted_label = predicted_label = labels[top_index].split(" ", 1)[1]
     confidence = float(output_data[top_index])
     
     return predicted_label, confidence
 
-# Test
+# Main entry point: get audio path from command line
 if __name__ == "__main__":
-    audio_path = "real-soft-crying-48637.wav"  # Change filename if needed
+    if len(sys.argv) < 2:
+        print("Usage: python classify_audio.py <audio_file_path>")
+        sys.exit(1)
+    audio_path = sys.argv[1]
     label, confidence = predict(audio_path)
-    print(f"Prediction: {label} ({confidence * 100:.2f}%)")
+    print(f"{label},{confidence}")
