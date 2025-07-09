@@ -32,7 +32,7 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
-  app.listen(PORT, '192.168.189.33', () => {
-  console.log(`🚀 Server is running on http://192.168.189.33:${PORT}`);
+  app.listen(PORT, '192.168.26.33', () => {
+  console.log(`🚀 Server is running on http://192.168.26.33:${PORT}`);
 });
 });

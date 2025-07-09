@@ -1,90 +1,156 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
 import api from '../utils/api';
+import { useNavigation } from '@react-navigation/native';
 
-const LoginScreen = ({ navigation }) => {
+const LoginScreen = () => {
+  const navigation = useNavigation();
+
   const [phone, setPhone] = useState('');
   const [pin, setPin] = useState('');
   const [password, setPassword] = useState('');
+  const [fingerprintHash, setFingerprintHash] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    if (!phone || (!pin && !password)) {
-      return Alert.alert('Error', 'Phone number and at least one credential is required.');
+    if (!phone) {
+      Alert.alert('Validation Error', 'Phone number is required');
+      return;
     }
 
+    if (!pin && !password && !fingerprintHash) {
+      Alert.alert('Validation Error', 'At least one credential is required (PIN, password, or fingerprint)');
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await api.post('/auth/login', {
+      const response = await api.post('/auth/login', {
         phone,
         pin,
         password,
-        fingerprintHash: "", 
+        fingerprintHash
       });
 
-      const userId = res.data.user._id;
-      await AsyncStorage.setItem('userId', userId);
-      navigation.replace('Home');
+      setLoading(false);
+
+      if (response.data && response.data.user) {
+        Alert.alert('Login Successful');
+        navigation.navigate('Home', { user: response.data.user });
+      } else {
+        Alert.alert('Error', 'Unexpected response from server');
+      }
     } catch (err) {
-      const msg = err.response?.data?.error || 'Login failed';
-      Alert.alert('Login Error', msg);
+      setLoading(false);
+      const message = err.response?.data?.error || 'Server error during login';
+      Alert.alert('Login Failed', message);
     }
   };
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Login</Text>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : null}
+      style={styles.container}
+    >
+      <Text style={styles.title}>Raksha AI - Login</Text>
 
-      <TextInput placeholder="Phone" style={styles.input} keyboardType="phone-pad" value={phone} onChangeText={setPhone} />
-      <TextInput placeholder="PIN (optional)" style={styles.input} secureTextEntry value={pin} onChangeText={setPin} />
-      <TextInput placeholder="Password (optional)" style={styles.input} secureTextEntry value={password} onChangeText={setPassword} />
+      <TextInput
+        style={styles.input}
+        placeholder="Phone Number"
+        keyboardType="phone-pad"
+        value={phone}
+        onChangeText={setPhone}
+      />
 
-      <TouchableOpacity style={styles.button} onPress={handleLogin}>
-        <Text style={styles.buttonText}>Login</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="PIN (Optional)"
+        secureTextEntry
+        keyboardType="numeric"
+        value={pin}
+        onChangeText={setPin}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Password (Optional)"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
+      />
+
+      <TextInput
+        style={styles.input}
+        placeholder="Fingerprint Hash (Optional)"
+        value={fingerprintHash}
+        onChangeText={setFingerprintHash}
+      />
+
+      <TouchableOpacity style={styles.button} onPress={handleLogin} disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.buttonText}>Login</Text>
+        )}
       </TouchableOpacity>
 
       <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-        <Text style={styles.linkText}>Don't have an account? Register</Text>
+        <Text style={styles.registerText}>Don't have an account? Register</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
-
-export default LoginScreen;
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 24,
+    backgroundColor: '#f1f5f9',
     justifyContent: 'center',
-    backgroundColor: '#fff',
+    paddingHorizontal: 24,
   },
   title: {
     fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    fontWeight: '700',
+    color: '#111827',
     marginBottom: 32,
+    textAlign: 'center',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#aaa',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#fff',
+    padding: 14,
+    borderRadius: 12,
     marginBottom: 16,
+    fontSize: 16,
+    borderColor: '#e5e7eb',
+    borderWidth: 1,
   },
   button: {
-    backgroundColor: '#007AFF',
-    padding: 14,
-    borderRadius: 8,
-    marginTop: 10,
+    backgroundColor: '#2563eb',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 12,
   },
   buttonText: {
     color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  linkText: {
-    color: '#007AFF',
+  registerText: {
     textAlign: 'center',
-    marginTop: 16,
+    color: '#1f2937',
+    fontSize: 14,
   },
 });
+
+export default LoginScreen;
