@@ -1,15 +1,12 @@
-const cloudinary = require("../config/Cloudinary");
 const fs = require("fs");
-const path = require("path"); // ✅ FIXED
-const User = require("../models/User");
-const SOS = require("../models/SOS");
+const path = require("path");
+const ffmpeg = require("fluent-ffmpeg");
+const { spawn } = require("child_process"); // ✅ THIS LINE is required
+const cloudinary = require("../config/cloudinary");
 const GuardianLog = require("../models/GuardianLog");
-const twilio = require("twilio");
-
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+const SOS = require("../models/SOS");
+const User = require("../models/User");
+const client = require("twilio")(process.env.TWILIO_SID, process.env.TWILIO_AUTH_TOKEN);
 
 exports.triggerSOS = async (req, res) => {
   try {
@@ -88,40 +85,62 @@ exports.classifyAndTriggerSOS = async (req, res) => {
 
     if (!audioFile) return res.status(400).json({ error: "Audio file required" });
 
-    // ✅ 1. Check Guardian Mode
     const guardian = await GuardianLog.findOne({ userId });
     if (!guardian || !guardian.isActive) {
-      fs.unlinkSync(audioFile.path);
+      if (fs.existsSync(audioFile.path)) fs.unlinkSync(audioFile.path);
       return res.status(403).json({ error: "Guardian Mode is not active" });
     }
 
-    // ✅ 2. Run Python model first
-    const { spawn } = require("child_process");
+    const ext = path.extname(audioFile.path).toLowerCase();
+    let wavPath = audioFile.path.replace(/\.[^/.]+$/, ".wav");
+
+    // Convert to .wav only if needed
+    if (ext !== ".wav") {
+      await new Promise((resolve, reject) => {
+        ffmpeg(audioFile.path)
+          .audioCodec("pcm_s16le")
+          .toFormat("wav")
+          .save(wavPath)
+          .on("end", resolve)
+          .on("error", reject);
+      });
+    } else {
+      wavPath = audioFile.path; // Already in correct format
+    }
+
+    // Run Python model
+    let output = "";
     const python = spawn("python", [
       path.join(__dirname, "../Python/classify_audio.py"),
-      audioFile.path,
+      wavPath,
     ]);
 
-    let output = "";
     python.stdout.on("data", (data) => (output += data.toString()));
     python.stderr.on("data", (err) => console.error("Python Error:", err.toString()));
 
     python.on("close", async () => {
+      if (!output.includes(",")) {
+        if (fs.existsSync(audioFile.path)) fs.unlinkSync(audioFile.path);
+        if (wavPath !== audioFile.path && fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
+        return res.status(500).json({ error: "Invalid output from Python model", raw: output });
+      }
+
       const [label, confidenceStr] = output.trim().split(",");
       const confidence = parseFloat(confidenceStr);
+      const normalizedLabel = label.toLowerCase().trim();
 
-      // ✅ 3. Upload to Cloudinary (only if detection passed)
       const cloudUpload = await cloudinary.uploader.upload(audioFile.path, {
         resource_type: "video",
         folder: "raksha-classified",
       });
 
-      // ✅ Delete local audio
-      fs.unlinkSync(audioFile.path);
       const audioUrl = cloudUpload.secure_url;
 
-      // ✅ 4. Trigger SOS only if relevant sound detected
-      if (["scream", "crying", "violence", "abuse"].includes(label.toLowerCase()) && confidence > 0.3) {
+      // Clean up files
+      if (fs.existsSync(audioFile.path)) fs.unlinkSync(audioFile.path);
+      if (wavPath !== audioFile.path && fs.existsSync(wavPath)) fs.unlinkSync(wavPath);
+
+      if (["screaming", "crying"].includes(normalizedLabel) && confidence > 0.3) {
         const newSOS = new SOS({ userId, audioUrl, location, detectedLabel: label, confidence });
         await newSOS.save();
 

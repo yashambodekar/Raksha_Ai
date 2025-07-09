@@ -1,3 +1,7 @@
-0 Background Noise
-1 Crying
-2 Scream
+0 background noise
+1 screaming
+2 crying
+3 laugh
+4 men talking
+5 normal girl voice
+

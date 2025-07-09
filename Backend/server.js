@@ -6,6 +6,7 @@ const authroutes = require("./routes/authRoutes")
 const guardianRoutes = require("./routes/guardianRoutes");
 const sosRoutes = require("./routes/sosRoutes");
 const userRoutes = require("./routes/userRoutes")
+const twilioRoutes = require("./routes/twilioRoutes");
 
 dotenv.config();
 
@@ -16,6 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/auth",authroutes)
+app.use("/twilio", twilioRoutes);
 app.use("/guardian", guardianRoutes);
 app.use("/sos", sosRoutes);
 app.use("/use",userRoutes);
@@ -30,7 +32,7 @@ app.get("/", (req, res) => {
 const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`🚀 Server is running on http://localhost:${PORT}`);
-  });
+  app.listen(PORT, '192.168.189.33', () => {
+  console.log(`🚀 Server is running on http://192.168.189.33:${PORT}`);
+});
 });
